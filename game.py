@@ -16,6 +16,10 @@ from strategies.medium_strategy import MediumStrategy
 from strategies.hard_strategy import HardStrategy
 from ui.renderer import Renderer
 from ui.button import Button
+from managers.command_history import CommandHistory
+from managers.hint_provider import HintProvider
+from commands.set_cell_command import SetCellCommand
+from commands.clear_cell_command import ClearCellCommand
 
 
 class Game:
@@ -70,6 +74,12 @@ class Game:
         self._medium_strategy = MediumStrategy()
         self._hard_strategy = HardStrategy()
 
+        # Command history for Undo/Redo
+        self._command_history = CommandHistory()
+
+        # Hint provider
+        self._hint_provider = HintProvider(self._solver)
+
         # Create UI buttons
         self._create_buttons()
 
@@ -108,6 +118,14 @@ class Game:
             self._return_to_menu
         )
 
+        # Hint button (shown during play)
+        self._hint_button = Button(
+            160, 30,
+            100, 40,
+            "Hint",
+            self._use_hint
+        )
+
     def _start_game(self, difficulty_strategy) -> None:
         """
         Start a new game with the specified difficulty.
@@ -120,6 +138,9 @@ class Game:
         # Generate new puzzle
         self._board = self._generator.generate(difficulty_strategy)
         self._board.set_validator(self._validator)
+
+        # Clear command history for new game
+        self._command_history.clear()
 
         # Update state
         self._current_difficulty = difficulty_strategy
@@ -194,6 +215,9 @@ class Game:
             # Handle New Game button
             self._new_game_button.handle_event(event)
 
+            # Handle Hint button
+            self._hint_button.handle_event(event)
+
             # Handle cell selection
             if event.type == pygame.MOUSEBUTTONDOWN:
                 self._handle_mouse_click(event.pos)
@@ -205,8 +229,19 @@ class Game:
         Args:
             key: PyGame key code
         """
+        # Check for Ctrl key modifier
+        ctrl_pressed = pygame.key.get_mods() & pygame.KMOD_CTRL
+
+        # Ctrl+Z to undo
+        if ctrl_pressed and key == pygame.K_z:
+            self._undo()
+
+        # Ctrl+Y to redo
+        elif ctrl_pressed and key == pygame.K_y:
+            self._redo()
+
         # ESC to return to menu
-        if key == pygame.K_ESCAPE:
+        elif key == pygame.K_ESCAPE:
             self._return_to_menu()
 
         # Number keys 1-9
@@ -247,32 +282,45 @@ class Game:
 
     def _place_number(self, row: int, col: int, number: int) -> None:
         """
-        Place a number in the specified cell.
+        Place a number in the specified cell using Command Pattern.
 
         Args:
             row: Row index (0-8)
             col: Column index (0-8)
             number: Number to place (1-9)
         """
-        success = self._board.set_cell(row, col, number)
+        # Check if cell is given (cannot modify)
+        cell = self._board.get_cell(row, col)
+        if cell.is_given:
+            print(f"Cannot modify given cell at ({row}, {col})")
+            return
 
-        if success:
-            # Check if board is solved
-            if self._validator.is_board_solved(self._board):
-                print("Congratulations! Puzzle solved!")
-                self._state = config.STATE_WON
-        else:
-            print(f"Invalid move: Cannot place {number} at ({row}, {col})")
+        # Create and execute command
+        command = SetCellCommand(self._board, row, col, number)
+        self._command_history.execute(command)
+
+        # Check if board is solved
+        if self._validator.is_board_solved(self._board):
+            print("Congratulations! Puzzle solved!")
+            self._state = config.STATE_WON
 
     def _clear_cell(self, row: int, col: int) -> None:
         """
-        Clear the specified cell.
+        Clear the specified cell using Command Pattern.
 
         Args:
             row: Row index (0-8)
             col: Column index (0-8)
         """
-        self._board.clear_cell(row, col)
+        # Check if cell is given (cannot modify)
+        cell = self._board.get_cell(row, col)
+        if cell.is_given:
+            print(f"Cannot modify given cell at ({row}, {col})")
+            return
+
+        # Create and execute command
+        command = ClearCellCommand(self._board, row, col)
+        self._command_history.execute(command)
 
     def _move_selection(self, dx: int, dy: int) -> None:
         """
@@ -290,6 +338,51 @@ class Game:
         else:
             # If nothing selected, select center cell
             self._selected_cell = (4, 4)
+
+    def _undo(self) -> None:
+        """
+        Undo the last action.
+
+        Uses Command Pattern to reverse the last executed command.
+        """
+        if self._command_history.undo():
+            print(f"Undo: {self._command_history.get_redo_size()} actions available to redo")
+        else:
+            print("Nothing to undo")
+
+    def _redo(self) -> None:
+        """
+        Redo the last undone action.
+
+        Uses Command Pattern to re-execute the last undone command.
+        """
+        if self._command_history.redo():
+            print(f"Redo: {self._command_history.get_history_size()} total actions")
+        else:
+            print("Nothing to redo")
+
+    def _use_hint(self) -> None:
+        """
+        Use the hint system to reveal a cell.
+
+        Gets a hint from HintProvider and places it using Command Pattern.
+        """
+        if not self._board:
+            return
+
+        hint = self._hint_provider.get_hint(self._board)
+
+        if hint:
+            row, col, value = hint
+            print(f"Hint: Cell ({row}, {col}) should be {value}")
+
+            # Select the hinted cell
+            self._selected_cell = (row, col)
+
+            # Place the number using command (for undo support)
+            self._place_number(row, col, value)
+        else:
+            print("No hints available (puzzle complete or unsolvable)")
 
     def _update(self) -> None:
         """Update game state."""
@@ -342,6 +435,9 @@ class Game:
 
         # Render New Game button
         self._new_game_button.render(self._screen)
+
+        # Render Hint button
+        self._hint_button.render(self._screen)
 
     def _render_victory(self) -> None:
         """Render victory message."""
