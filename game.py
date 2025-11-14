@@ -18,6 +18,8 @@ from ui.renderer import Renderer
 from ui.button import Button
 from managers.command_history import CommandHistory
 from managers.hint_provider import HintProvider
+from managers.timer import Timer
+from managers.statistics_manager import StatisticsManager
 from commands.set_cell_command import SetCellCommand
 from commands.clear_cell_command import ClearCellCommand
 
@@ -79,6 +81,12 @@ class Game:
 
         # Hint provider
         self._hint_provider = HintProvider(self._solver)
+
+        # Timer for tracking game time
+        self._timer = Timer()
+
+        # Statistics manager
+        self._statistics = StatisticsManager()
 
         # Create UI buttons
         self._create_buttons()
@@ -142,6 +150,12 @@ class Game:
         # Clear command history for new game
         self._command_history.clear()
 
+        # Reset and start timer
+        self._timer.start()
+
+        # Reset statistics
+        self._statistics.reset()
+
         # Update state
         self._current_difficulty = difficulty_strategy
         self._state = config.STATE_PLAYING
@@ -151,6 +165,9 @@ class Game:
 
     def _return_to_menu(self) -> None:
         """Return to main menu."""
+        # Stop timer
+        self._timer.stop()
+
         self._state = config.STATE_MENU
         self._board = None
         self._selected_cell = None
@@ -299,9 +316,13 @@ class Game:
         command = SetCellCommand(self._board, row, col, number)
         self._command_history.execute(command)
 
+        # Record move in statistics
+        self._statistics.record_move()
+
         # Check if board is solved
         if self._validator.is_board_solved(self._board):
             print("Congratulations! Puzzle solved!")
+            self._timer.stop()  # Stop timer on win
             self._state = config.STATE_WON
 
     def _clear_cell(self, row: int, col: int) -> None:
@@ -346,6 +367,7 @@ class Game:
         Uses Command Pattern to reverse the last executed command.
         """
         if self._command_history.undo():
+            self._statistics.record_undo()
             print(f"Undo: {self._command_history.get_redo_size()} actions available to redo")
         else:
             print("Nothing to undo")
@@ -357,6 +379,7 @@ class Game:
         Uses Command Pattern to re-execute the last undone command.
         """
         if self._command_history.redo():
+            self._statistics.record_redo()
             print(f"Redo: {self._command_history.get_history_size()} total actions")
         else:
             print("Nothing to redo")
@@ -375,6 +398,9 @@ class Game:
         if hint:
             row, col, value = hint
             print(f"Hint: Cell ({row}, {col}) should be {value}")
+
+            # Record hint usage
+            self._statistics.record_hint()
 
             # Select the hinted cell
             self._selected_cell = (row, col)
@@ -430,14 +456,37 @@ class Game:
         # Render board
         self._renderer.render_board(self._board, self._selected_cell)
 
-        # Render UI elements
-        self._renderer.render_ui(timer_text="00:00")  # TODO: Real timer in Phase 4
+        # Render UI elements with real timer
+        timer_text = self._timer.get_formatted_time()
+        self._renderer.render_ui(timer_text=timer_text)
+
+        # Render statistics
+        self._render_statistics()
 
         # Render New Game button
         self._new_game_button.render(self._screen)
 
         # Render Hint button
         self._hint_button.render(self._screen)
+
+    def _render_statistics(self) -> None:
+        """Render game statistics."""
+        font = pygame.font.Font(None, 20)
+
+        # Position at bottom left
+        y_offset = 650
+        x_offset = 30
+
+        # Render statistics
+        stats_text = [
+            f"Moves: {self._statistics.moves}",
+            f"Hints: {self._statistics.hints_used}",
+            f"Undos: {self._statistics.undos}",
+        ]
+
+        for i, text in enumerate(stats_text):
+            surface = font.render(text, True, config.DARK_GRAY)
+            self._screen.blit(surface, (x_offset, y_offset + i * 20))
 
     def _render_victory(self) -> None:
         """Render victory message."""
@@ -453,8 +502,19 @@ class Game:
         victory_rect = victory_surface.get_rect(center=(config.SCREEN_WIDTH // 2, 250))
         self._screen.blit(victory_surface, victory_rect)
 
-        # Instruction text
+        # Time and statistics
         font_ui = pygame.font.Font(None, config.FONT_SIZE_UI)
+        time_text = f"Time: {self._timer.get_formatted_time()}"
+        time_surface = font_ui.render(time_text, True, config.BLACK)
+        time_rect = time_surface.get_rect(center=(config.SCREEN_WIDTH // 2, 290))
+        self._screen.blit(time_surface, time_rect)
+
+        moves_text = f"Moves: {self._statistics.moves} | Hints: {self._statistics.hints_used}"
+        moves_surface = font_ui.render(moves_text, True, config.BLACK)
+        moves_rect = moves_surface.get_rect(center=(config.SCREEN_WIDTH // 2, 320))
+        self._screen.blit(moves_surface, moves_rect)
+
+        # Instruction text
         instruction_surface = font_ui.render("Press ESC for menu", True, config.BLACK)
-        instruction_rect = instruction_surface.get_rect(center=(config.SCREEN_WIDTH // 2, 300))
+        instruction_rect = instruction_surface.get_rect(center=(config.SCREEN_WIDTH // 2, 360))
         self._screen.blit(instruction_surface, instruction_rect)
