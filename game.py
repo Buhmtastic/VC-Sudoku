@@ -9,7 +9,13 @@ import config
 from board import Board
 from cell import Cell
 from validator import Validator
+from solver import Solver
+from puzzle_generator import PuzzleGenerator
+from strategies.easy_strategy import EasyStrategy
+from strategies.medium_strategy import MediumStrategy
+from strategies.hard_strategy import HardStrategy
 from ui.renderer import Renderer
+from ui.button import Button
 
 
 class Game:
@@ -21,11 +27,13 @@ class Game:
     - Run game loop
     - Handle events
     - Coordinate all game components
+    - Manage game states (menu, playing)
 
     OOP Principles Applied:
     - Single Responsibility: Game flow management
     - Dependency Injection: Components created and injected
     - Facade Pattern: Simplifies interaction with subsystems
+    - State Pattern: Different behavior based on game state
     """
 
     def __init__(self):
@@ -44,41 +52,87 @@ class Game:
 
         # Game state
         self._running = False
+        self._state = config.STATE_MENU  # Start in menu
         self._selected_cell: Optional[Tuple[int, int]] = None
+        self._current_difficulty = None
 
         # Create game components (Dependency Injection)
-        self._board = Board()
         self._validator = Validator()
-        self._board.set_validator(self._validator)
+        self._solver = Solver(self._validator)
+        self._generator = PuzzleGenerator(self._solver)
         self._renderer = Renderer(self._screen)
 
-        # Initialize with empty board for now
-        # TODO: In Phase 3, generate puzzle here
-        self._init_test_board()
+        # Board (will be generated when difficulty selected)
+        self._board = None
 
-    def _init_test_board(self) -> None:
-        """
-        Initialize a test board with some numbers.
-        This is temporary for Phase 1 testing.
-        Will be replaced with puzzle generation in Phase 3.
-        """
-        # Add a few test numbers to verify rendering
-        test_values = [
-            (0, 0, 5), (0, 1, 3), (0, 4, 7),
-            (1, 0, 6), (1, 3, 1), (1, 4, 9), (1, 5, 5),
-            (2, 1, 9), (2, 2, 8), (2, 7, 6),
-            (3, 0, 8), (3, 4, 6), (3, 8, 3),
-            (4, 0, 4), (4, 3, 8), (4, 5, 3), (4, 8, 1),
-            (5, 0, 7), (5, 4, 2), (5, 8, 6),
-            (6, 1, 6), (6, 6, 2), (6, 7, 8),
-            (7, 3, 4), (7, 4, 1), (7, 5, 9), (7, 8, 5),
-            (8, 4, 8), (8, 7, 7), (8, 8, 9),
-        ]
+        # Difficulty strategies
+        self._easy_strategy = EasyStrategy()
+        self._medium_strategy = MediumStrategy()
+        self._hard_strategy = HardStrategy()
 
-        for row, col, value in test_values:
-            cell = self._board.get_cell(row, col)
-            cell._value = value
-            cell._is_given = True  # Mark as initial values
+        # Create UI buttons
+        self._create_buttons()
+
+    def _create_buttons(self) -> None:
+        """Create all UI buttons."""
+        button_y = 150
+        button_spacing = 60
+
+        # Difficulty buttons (shown in menu)
+        self._easy_button = Button(
+            200, button_y,
+            200, 50,
+            "Easy",
+            lambda: self._start_game(self._easy_strategy)
+        )
+
+        self._medium_button = Button(
+            200, button_y + button_spacing,
+            200, 50,
+            "Medium",
+            lambda: self._start_game(self._medium_strategy)
+        )
+
+        self._hard_button = Button(
+            200, button_y + button_spacing * 2,
+            200, 50,
+            "Hard",
+            lambda: self._start_game(self._hard_strategy)
+        )
+
+        # New Game button (shown during play)
+        self._new_game_button = Button(
+            30, 30,
+            120, 40,
+            "New Game",
+            self._return_to_menu
+        )
+
+    def _start_game(self, difficulty_strategy) -> None:
+        """
+        Start a new game with the specified difficulty.
+
+        Args:
+            difficulty_strategy: DifficultyStrategy instance
+        """
+        print(f"Generating {difficulty_strategy.get_name()} puzzle...")
+
+        # Generate new puzzle
+        self._board = self._generator.generate(difficulty_strategy)
+        self._board.set_validator(self._validator)
+
+        # Update state
+        self._current_difficulty = difficulty_strategy
+        self._state = config.STATE_PLAYING
+        self._selected_cell = None
+
+        print("Puzzle generated!")
+
+    def _return_to_menu(self) -> None:
+        """Return to main menu."""
+        self._state = config.STATE_MENU
+        self._board = None
+        self._selected_cell = None
 
     def run(self) -> None:
         """
@@ -115,9 +169,33 @@ class Game:
                 self._running = False
 
             elif event.type == pygame.KEYDOWN:
-                self._handle_keypress(event.key)
+                if self._state == config.STATE_PLAYING:
+                    self._handle_keypress(event.key)
+                elif event.type == pygame.K_ESCAPE:
+                    self._running = False
 
-            elif event.type == pygame.MOUSEBUTTONDOWN:
+            elif event.type in (pygame.MOUSEBUTTONDOWN, pygame.MOUSEBUTTONUP, pygame.MOUSEMOTION):
+                self._handle_mouse_event(event)
+
+    def _handle_mouse_event(self, event: pygame.event.Event) -> None:
+        """
+        Handle mouse events (clicks, motion).
+
+        Args:
+            event: PyGame mouse event
+        """
+        if self._state == config.STATE_MENU:
+            # Handle difficulty button clicks
+            self._easy_button.handle_event(event)
+            self._medium_button.handle_event(event)
+            self._hard_button.handle_event(event)
+
+        elif self._state == config.STATE_PLAYING:
+            # Handle New Game button
+            self._new_game_button.handle_event(event)
+
+            # Handle cell selection
+            if event.type == pygame.MOUSEBUTTONDOWN:
                 self._handle_mouse_click(event.pos)
 
     def _handle_keypress(self, key: int) -> None:
@@ -127,9 +205,9 @@ class Game:
         Args:
             key: PyGame key code
         """
-        # ESC to quit
+        # ESC to return to menu
         if key == pygame.K_ESCAPE:
-            self._running = False
+            self._return_to_menu()
 
         # Number keys 1-9
         elif pygame.K_1 <= key <= pygame.K_9:
@@ -156,7 +234,7 @@ class Game:
 
     def _handle_mouse_click(self, pos: Tuple[int, int]) -> None:
         """
-        Handle mouse click events.
+        Handle mouse click events on board.
 
         Args:
             pos: Mouse position (x, y)
@@ -181,7 +259,8 @@ class Game:
         if success:
             # Check if board is solved
             if self._validator.is_board_solved(self._board):
-                print("Congratulations! Puzzle solved!")  # TODO: Show UI message in Phase 5
+                print("Congratulations! Puzzle solved!")
+                self._state = config.STATE_WON
         else:
             print(f"Invalid move: Cannot place {number} at ({row}, {col})")
 
@@ -220,11 +299,66 @@ class Game:
 
     def _render(self) -> None:
         """Render the current frame."""
+        # Clear screen
+        self._screen.fill(config.WHITE)
+
+        if self._state == config.STATE_MENU:
+            self._render_menu()
+        elif self._state == config.STATE_PLAYING:
+            self._render_game()
+        elif self._state == config.STATE_WON:
+            self._render_game()  # Still show board
+            self._render_victory()
+
+        # Update display
+        pygame.display.flip()
+
+    def _render_menu(self) -> None:
+        """Render main menu."""
+        # Title
+        font_title = pygame.font.Font(None, config.FONT_SIZE_TITLE)
+        title_surface = font_title.render("Sudoku Master", True, config.BLACK)
+        title_rect = title_surface.get_rect(center=(config.SCREEN_WIDTH // 2, 80))
+        self._screen.blit(title_surface, title_rect)
+
+        # Subtitle
+        font_ui = pygame.font.Font(None, config.FONT_SIZE_UI)
+        subtitle_surface = font_ui.render("Select Difficulty:", True, config.DARK_GRAY)
+        subtitle_rect = subtitle_surface.get_rect(center=(config.SCREEN_WIDTH // 2, 120))
+        self._screen.blit(subtitle_surface, subtitle_rect)
+
+        # Difficulty buttons
+        self._easy_button.render(self._screen)
+        self._medium_button.render(self._screen)
+        self._hard_button.render(self._screen)
+
+    def _render_game(self) -> None:
+        """Render game board."""
         # Render board
         self._renderer.render_board(self._board, self._selected_cell)
 
         # Render UI elements
         self._renderer.render_ui(timer_text="00:00")  # TODO: Real timer in Phase 4
 
-        # Update display
-        pygame.display.flip()
+        # Render New Game button
+        self._new_game_button.render(self._screen)
+
+    def _render_victory(self) -> None:
+        """Render victory message."""
+        # Semi-transparent overlay
+        overlay = pygame.Surface((config.SCREEN_WIDTH, config.SCREEN_HEIGHT))
+        overlay.set_alpha(200)
+        overlay.fill(config.WHITE)
+        self._screen.blit(overlay, (0, 0))
+
+        # Victory text
+        font_title = pygame.font.Font(None, config.FONT_SIZE_TITLE)
+        victory_surface = font_title.render("Congratulations!", True, config.GREEN)
+        victory_rect = victory_surface.get_rect(center=(config.SCREEN_WIDTH // 2, 250))
+        self._screen.blit(victory_surface, victory_rect)
+
+        # Instruction text
+        font_ui = pygame.font.Font(None, config.FONT_SIZE_UI)
+        instruction_surface = font_ui.render("Press ESC for menu", True, config.BLACK)
+        instruction_rect = instruction_surface.get_rect(center=(config.SCREEN_WIDTH // 2, 300))
+        self._screen.blit(instruction_surface, instruction_rect)
