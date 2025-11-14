@@ -20,10 +20,11 @@
 - Auto-save and load functionality
 
 ### Advanced Features
-- **Unlimited Undo/Redo**: Command Pattern implementation
-- **Hint System**: Get help when stuck
-- **Timer**: Track your solving time
-- **Statistics**: View your game history and performance
+- **Unlimited Undo/Redo**: Command Pattern implementation (Ctrl+Z / Ctrl+Y)
+- **Hint System**: Smart hint provider using solver algorithm
+- **Timer**: Real-time game timer with pause/resume
+- **Statistics**: Track moves, hints used, and undo operations
+- **Standalone Executable**: No Python installation required (Windows)
 
 ## 🏗️ Architecture
 
@@ -50,15 +51,35 @@
 
 ## 🚀 Quick Start
 
-### Prerequisites
-- Python 3.8 or higher
-- pip package manager
-
-### Installation
+### Option 1: Run Executable (Easiest - No Python Required!)
 
 1. Clone the repository:
 ```bash
-git clone https://github.com/yourusername/VC-Sudoku.git
+git clone https://github.com/Buhmtastic/VC-Sudoku.git
+cd VC-Sudoku
+```
+
+2. Run the game:
+```bash
+Build/SudokuMaster.exe
+```
+
+**System Requirements:**
+- Windows 10 or later (64-bit)
+- No Python installation required
+- No additional dependencies
+
+### Option 2: Run from Source
+
+**Prerequisites:**
+- Python 3.8 or higher
+- pip package manager
+
+**Installation:**
+
+1. Clone the repository:
+```bash
+git clone https://github.com/Buhmtastic/VC-Sudoku.git
 cd VC-Sudoku
 ```
 
@@ -115,7 +136,7 @@ python main.py
 ## 📁 Project Structure
 
 ```
-sudoku/
+VC-Sudoku/
 ├── main.py                     # Game entry point
 ├── game.py                     # Game class (main loop)
 ├── board.py                    # Board class
@@ -123,6 +144,7 @@ sudoku/
 ├── validator.py                # Validator class
 ├── solver.py                   # Solver class (backtracking)
 ├── puzzle_generator.py         # PuzzleGenerator class
+├── config.py                   # Game constants
 ├── strategies/                 # Strategy Pattern
 │   ├── difficulty_strategy.py
 │   ├── easy_strategy.py
@@ -136,12 +158,12 @@ sudoku/
 │   ├── command_history.py
 │   ├── hint_provider.py
 │   ├── timer.py
-│   ├── save_manager.py
 │   └── statistics_manager.py
 ├── ui/                         # UI components
 │   ├── renderer.py
 │   └── button.py
-├── config.py                   # Game constants
+├── Build/                      # Standalone executable
+│   └── SudokuMaster.exe       # Windows executable (15 MB)
 ├── data/                       # Save data
 └── tests/                      # Unit tests
 ```
@@ -155,11 +177,14 @@ pytest tests/
 
 ## 📊 Development Phases
 
-- ✅ **Phase 1**: Basic Board & UI (Week 1)
-- ✅ **Phase 2**: Validation System (Week 2)
-- ✅ **Phase 3**: Puzzle Generation (Week 3)
-- ✅ **Phase 4**: Advanced Features (Week 4)
-- ✅ **Phase 5**: Polishing & Deployment (Week 5)
+- ✅ **Phase 1**: Basic Board & UI - Core game structure and rendering
+- ✅ **Phase 2**: Validation System - Sudoku rules enforcement
+- ✅ **Phase 3**: Puzzle Generation - Backtracking algorithm & difficulty levels
+- ✅ **Phase 4**: Command Pattern & Hints - Undo/Redo system & hint provider
+- ✅ **Phase 5**: Timer & Statistics - Game metrics and polish
+- ✅ **Build & Distribution**: Standalone executable with PyInstaller
+
+**Development Sessions**: See DevLogs (SD01-SD06) for detailed development history
 
 ## 🎓 Learning Outcomes
 
@@ -176,9 +201,9 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## 👨‍💻 Author
 
-**Your Name**
-- GitHub: [@yourusername](https://github.com/yourusername)
-- Portfolio: [yourportfolio.com](https://yourportfolio.com)
+**Buhmtastic**
+- GitHub: [@Buhmtastic](https://github.com/Buhmtastic)
+- Project Repository: [VC-Sudoku](https://github.com/Buhmtastic/VC-Sudoku)
 
 ## 🙏 Acknowledgments
 
